@@ -9,6 +9,9 @@ In search and rescue, a responder on the ground may need to direct a drone witho
 
 <sub>The live demo: the signal to perform, the tracked body, and what the model recognises.</sub>
 
+[![IEEE USYS 2026](https://img.shields.io/badge/IEEE-USYS%202026-1c1c1e?style=flat-square)](#citation)
+[![License: MIT](https://img.shields.io/badge/License-MIT-1c1c1e?style=flat-square)](LICENSE)
+    
 <br>
 
 <img src="assets/highlights.png" alt="91.2% video accuracy on unseen people; 86.0% at 70° camera elevation versus 38.4% unaugmented; 160 times fewer wrong actions with the safety gate; 2.8 ms per decision on one CPU thread." width="100%">
