@@ -73,7 +73,7 @@ tests/                fast checks that need no dataset
 You need Python 3.9 or later. No GPU is required: every experiment in the paper was run on a laptop CPU.
 
 ```bash
-git clone https://github.com/<your-username>/uav-body-signals.git
+git clone https://github.com/iamabdirazak/uav-body-signals.git
 cd uav-body-signals
 python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
