@@ -1,6 +1,6 @@
-# Body-Signal Recognition for Commanding Drones
+# Body-Signal Recognition for Commanding Drones in Search and Rescue
 
-Direct a drone with the same body signals ground crews use to guide aircraft. This system recognises them through the drone's own camera, keeps working when the drone looks down at steep angles, and acts only when it is sure.
+In search and rescue, a responder on the ground may need to direct a drone without a radio or controller. This system lets them use the body signals ground crews already use to guide aircraft, recognised through the drone's own camera. It keeps working when the drone looks down at steep angles, and acts only when it is sure.
 
 [![IEEE USYS 2026](https://img.shields.io/badge/IEEE-USYS%202026-1c1c1e?style=flat-square)](#citation)
 [![License: MIT](https://img.shields.io/badge/License-MIT-1c1c1e?style=flat-square)](LICENSE)
@@ -17,7 +17,7 @@ Direct a drone with the same body signals ground crews use to guide aircraft. Th
 
 ## Overview
 
-In search and rescue, a responder on the ground may need to tell a drone to hold position over a casualty, change altitude, land or abort, at a moment when a radio or handheld controller isn't practical. Aviation already has a vocabulary for this: the standardised aircraft-handling signals that ground crews use to direct aircraft. This project teaches a drone to read those signals from its own camera.
+During a rescue, a responder may need a drone to hold position over a casualty, change altitude, land or abort, often with their hands busy, gloves on, or no controller within reach. Aviation already has a vocabulary for this: the standardised aircraft-handling signals that ground crews use to direct aircraft. This project teaches a drone to read those signals from its own camera.
 
 Reading them from the air is harder than reading them from the ground, for three reasons:
 
