@@ -13,50 +13,63 @@ In search and rescue, a responder on the ground may need to direct a drone witho
 
 During a rescue, a responder may need a drone to hold position over a casualty, change altitude, land or abort, often with their hands busy, gloves on, or no controller within reach. Aviation already has a vocabulary for this: the standardised aircraft-handling signals that ground crews use to direct aircraft. This project teaches a drone to read those signals from its own camera.
 
+To be useful in the field, the system has to recognise people it has never seen, keep working as the drone's viewpoint changes, never act on a misread signal, and run on the drone's own hardware. Each of these is handled by one part of a deliberately small design. Describing the body by its own keypoints lets a compact recurrent network generalise to new people. Training on simulated drone viewpoints keeps it accurate when the camera looks steeply down. A safety gate turns signals into commands only when the evidence is consistent. And because the whole chain works on 14 keypoints rather than images, it needs only milliseconds of a single CPU core.
+
 <img src="assets/highlights.png" alt="91.2% video accuracy on unseen people; 86.0% at 70° camera elevation versus 38.4% unaugmented; 160 times fewer wrong actions with the safety gate; 2.8 ms per decision on one CPU thread." width="100%">
 
-<sub>Offline evaluation on recorded aerial video, tested on people the model never saw in training.</sub>
-
-The approach is deliberately small. Each person is reduced to 14 body keypoints and described relative to their own body. A compact recurrent network classifies 1.2 seconds of movement, trained on simulated drone viewpoints. A safety gate then turns recognised signals into commands only when the evidence is consistent. The result runs on a single CPU core alongside any pose estimator, and it is the implementation behind the paper *Toward Viewpoint-Robust Body-Signal Recognition for Commanding UAVs in Search and Rescue* (IEEE USYS 2026).
+<sub>One number for each requirement, in the same order. Offline evaluation on recorded aerial video, tested on people the model never saw in training.</sub>
 
 ## How it works
 
+The system is a chain of small, independent modules, joined by one simple interface: 14 body keypoints per frame. A pose estimator turns each camera frame into keypoints. Everything after that point works on the skeleton alone, which separates seeing the person from understanding the signal. The pose estimator can be swapped, the recogniser stays light enough for on-board hardware, and each stage can be tested on its own. A second idea runs through training: the recogniser never sees drone footage from steep angles, so it is taught what such footage would look like.
+
+### The pipeline
+
 <img src="assets/pipeline.png" alt="Pipeline: camera stream, pose estimation, body-centred features, temporal model, safety gate." width="100%">
 
-Every video frame passes through five stages, from camera image to a command the drone can act on.
+<sub>From camera frame to command, in five stages.</sub>
 
-| Stage | What it does |
-|:--|:--|
-| **Pose estimation** | A 2D pose estimator finds 14 body joints in each frame. Any estimator works. The paper uses the OpenPose keypoints released with the dataset, and the demo uses MediaPipe. |
-| **Body-centred features** | Each 1.2 s window is centred on the neck and scaled by torso length, so where the person stands in the frame, and how far away, no longer matters. Missing joints are interpolated over time and velocities are added, giving 56 values per frame. |
-| **Temporal model** | A two-layer LSTM with 128 units classifies the window into one of 13 signals. It reads time in one direction only, so on board it can update frame by frame. |
-| **Safety gate** | Every 0.2 s, the gate accepts a signal only if it wins 6 of the last 8 windows with mean confidence of at least 0.7. *Have command* arms the gate, the next accepted signal is executed, and *wave off* always goes through so an abort is never delayed. |
+1. **Camera stream.** The drone's camera delivers video at 25 frames per second.
 
-The model learns to handle the drone's viewpoint through augmentation. During training, every window is shown as a drone might see it, and nothing is changed at test time.
+2. **Pose estimation.** A 2D pose estimator finds 14 body joints in each frame. Any estimator works: the paper uses the OpenPose keypoints released with the dataset, and the demo uses MediaPipe.
+
+3. **Body-centred features.** Each 1.2-second window is centred on the neck and scaled by torso length, so where the person stands in the frame, and how far away, no longer matters. Missing joints are filled in over time and joint velocities are added.
+
+4. **Temporal model.** A two-layer LSTM reads the window and classifies it as one of 13 signals: *all clear, have command, hover, land, landing direction, move ahead, move downward, move to left, move to right, move upward, not clear, slow down* and *wave off*. It reads time in one direction only, so on board it can update frame by frame.
+
+5. **Safety gate.** Every 0.2 seconds, the gate accepts a signal only when it wins 6 of the last 8 windows with mean confidence of at least 0.7. The responder first signals *have command* to arm the gate, and the next accepted signal is executed. *Wave off* always goes through, so an abort is never delayed.
+
+### Viewpoint augmentation
+
+The training videos were filmed by a drone hovering at low altitude in front of the person. In a real search, the drone is higher and looks down, its frame tilts as it moves, and the pose estimator misses joints or places them imprecisely. Rather than collect new footage for every condition, each training window is transformed into how a drone might have seen it. The camera is tilted down by up to 60° and rolled by up to 10°, joints are removed and jittered, one arm is hidden for up to 30 frames, and the pose rate is lowered to as little as 5 fps. A fresh variation is drawn every epoch, and nothing is changed at test time.
 
 <img src="assets/augmentation.png" alt="Viewpoint augmentation of one recorded pose: elevation 60°, roll 10°, dropout and noise." width="100%">
 
-<sub>One recorded pose and three of the perturbations applied in training. Training also varies scale, hides one arm for up to 30 frames, and lowers the pose rate to as little as 5 fps.</sub>
-
-The 13 signals are those in the [UAV-GESTURE](https://asankagp.github.io/uavgesture) dataset, taken from the NATOPS aircraft-handling manual: *all clear, have command, hover, land, landing direction, move ahead, move downward, move to left, move to right, move upward, not clear, slow down* and *wave off*.
+<sub>One recorded pose and three of its training variations. The grey skeleton is the original.</sub>
 
 ## Results
 
-All results are on people the model never saw in training. Each of three folds holds out a different group of actors (see [Evaluation protocol](#evaluation-protocol)).
+The system was evaluated on [UAV-GESTURE](https://asankagp.github.io/uavgesture), a public dataset of 119 videos recorded from a hovering drone, in which eight people, filmed under 11 actor IDs, perform the 13 signals. Every result is measured on people the model never saw in training: the actor IDs are split into three groups, and each group is held out once while the model is trained on the rest ([Evaluation protocol](#evaluation-protocol)). The evaluation asks three questions in turn. How accurately are signals recognised from keypoints alone? How well does recognition hold up under the conditions a drone would face in the field? And how often would the drone act wrongly once predictions become commands? All three are answered offline, on recorded video, and every number can be reproduced with the scripts in this repository.
 
-**Recognition.** Describing keypoints relative to the body is what makes the task learnable from a moving camera: the same network goes from 15.8% to 82.9%. Velocities and augmentation then bring a keypoint-only model to 91.2%, level with a baseline that also uses colour images and optical flow.
+### Recognition
+
+Describing keypoints relative to the body is what makes the task learnable from a moving camera: the same network goes from 15.8% to 82.9%. Velocities and augmentation then bring a keypoint-only model to 91.2%, level with a baseline that also uses colour images and optical flow.
 
 <img src="assets/ablation.png" alt="Video accuracy for each model, from 15.8% for image coordinates to 91.2% for the proposed model." width="100%">
 
 <sub>Video accuracy, mean of three folds. The dashed line is the RGB and optical-flow baseline reported with the dataset.</sub>
 
-**Robustness.** Viewpoint is the main way recognition fails. As the simulated camera tilts down to 70°, models trained without augmentation fall to between 21% and 38%, while the proposed model holds at 86%. Missing joints and low pose rates barely matter. Heavy keypoint noise is the remaining weakness.
+### Robustness
+
+Viewpoint is the main way recognition fails. As the simulated camera tilts down to 70°, models trained without augmentation fall to between 21% and 38%, while the proposed model holds at 86%. Missing joints and low pose rates barely matter. Heavy keypoint noise is the remaining weakness.
 
 <img src="assets/robustness.png" alt="Accuracy against camera elevation, roll, missing joints, keypoint noise and pose rate." width="100%">
 
 <sub>Video accuracy as each condition is applied to test keypoints, without retraining. Training covered elevation up to 60°, roll up to 10°, dropout up to 30% and noise up to 0.08 torso lengths.</sub>
 
-**Safety.** Acting on every prediction executes the intended command almost every time, but adds nearly five wrong actions per stream. The gate cuts wrong actions to 0.03, about 160 times fewer, at the cost of 1 s of extra latency and some missed commands.
+### Safety
+
+Acting on every prediction executes the intended command almost every time, but adds nearly five wrong actions per stream. The gate cuts wrong actions to 0.03, about 160 times fewer, at the cost of 1 s of extra latency and some missed commands.
 
 <img src="assets/safety_gate.png" alt="Executed commands and wrong actions per stream for four gate policies." width="100%">
 
@@ -185,7 +198,7 @@ All results use three actor-disjoint folds, with test actors {S13, S14, S15}, {S
 
 ## Citation
 
-If you use this code, please cite the paper. The IEEE Xplore link will be added once the proceedings are published.
+This repository implements the paper *Toward Viewpoint-Robust Body-Signal Recognition for Commanding UAVs in Search and Rescue*, presented at IEEE USYS 2026. If you use this code, please cite it. The IEEE Xplore link will be added once the proceedings are published.
 
 ```bibtex
 @inproceedings{muhumed2026viewpoint,
