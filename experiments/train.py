@@ -1,25 +1,35 @@
-"""Train and evaluate models on the three actor-disjoint folds (Table I, Fig. 3).
+"""Train and evaluate every configuration on the three actor-disjoint folds, with several seeds (Table I).
 
-    python -m experiments.train                 # all six configurations
-    python -m experiments.train lstm tcn        # selected configurations
-    python -m experiments.train lstm --folds 2  # one fold
+Each (configuration, fold, seed) run saves a checkpoint and its per-video predictions. Finished runs
+are skipped, so an interrupted job can simply be started again.
+
+    python -m experiments.train                          # all configurations, seeds 0-4
+    python -m experiments.train lstm tcn --seeds 0 1 2   # selected configurations and seeds
 """
+import json
+import os
 import time
 
-import numpy as np
 import torch
 
 from uavsignals.protocol import FOLDS, fold
 from uavsignals.training import CONFIGS, evaluate, train
 
-from .common import checkpoint_path, load, mean_std, parser, save_json
+from .common import OUTPUT, checkpoint_path, load, parser, save_json
+
+SEEDS = [0, 1, 2, 3, 4]
+
+
+def results_file(name):
+    return os.path.join(OUTPUT, f'train_{name}.json')
 
 
 def main():
     p = parser(__doc__)
     p.add_argument('configs', nargs='*', help=f'any of: {", ".join(CONFIGS)} (default: all)')
+    p.add_argument('--seeds', nargs='*', type=int, default=SEEDS)
     p.add_argument('--folds', nargs='*', type=int, default=list(FOLDS))
-    p.add_argument('--threads', type=int, default=4)
+    p.add_argument('--threads', type=int, default=2)
     args = p.parse_args()
     names = args.configs or list(CONFIGS)
     unknown = set(names) - set(CONFIGS)
@@ -27,24 +37,24 @@ def main():
         p.error(f'unknown configuration(s): {", ".join(sorted(unknown))}')
     videos = load(args)
 
-    results = {}
     for name in names:
         cfg = CONFIGS[name]
-        r = dict(window=[], video=[], confusion=np.zeros((13, 13), int))
-        start = time.time()
-        for k in args.folds:
-            train_names, test_names = fold(videos, k)
-            net = train(cfg, videos, train_names, epochs=cfg.epochs[k - 1], threads=args.threads)
-            torch.save(net.state_dict(), checkpoint_path(name, k))
-            window_acc, video_acc, confusion = evaluate(net, cfg, videos, test_names)
-            r['window'].append(float(window_acc))
-            r['video'].append(float(video_acc))
-            r['confusion'] += confusion
-            print(f'  {name} fold {k}: window {100 * window_acc:.1f}%  video {100 * video_acc:.1f}%', flush=True)
-        print(f'{name}: window {mean_std(r["window"])}  video {mean_std(r["video"])}  ({time.time() - start:.0f} s)', flush=True)
-        r['confusion'] = r['confusion'].tolist()
-        results[name] = r
-        save_json(results, f'train_{"_".join(names)}.json')
+        path = results_file(name)
+        runs = json.load(open(path))['runs'] if os.path.exists(path) else []
+        done = {(r['seed'], r['fold']) for r in runs}
+        for seed in args.seeds:
+            for k in args.folds:
+                if (seed, k) in done:
+                    continue
+                start = time.time()
+                train_names, test_names = fold(videos, k)
+                net = train(cfg, videos, train_names, seed=seed, threads=args.threads)
+                torch.save(net.state_dict(), checkpoint_path(name, k, seed))
+                window_acc, video_acc, predictions = evaluate(net, cfg, videos, test_names)
+                runs.append(dict(seed=seed, fold=k, window=window_acc, video=video_acc, predictions=predictions))
+                save_json(dict(config=name, runs=runs), os.path.basename(path), quiet=True)
+                print(f'{name} seed {seed} fold {k}: window {100 * window_acc:.1f}%  video {100 * video_acc:.1f}%'
+                      f'  ({time.time() - start:.0f} s)', flush=True)
 
 
 if __name__ == '__main__':

@@ -1,10 +1,8 @@
 """Draw the README figures in assets/ from results.
 
-    python -m experiments.figures                 # from the paper's numbers (results/paper.json)
-    python -m experiments.figures --from-runs     # from your own runs (runs/results/*.json)
+    python -m experiments.figures      # from results/paper.json, written by experiments.summary
 """
 import argparse
-import glob
 import json
 import os
 
@@ -15,7 +13,7 @@ from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch
 from uavsignals import augment as A
 from uavsignals.constants import EDGES
 
-from .common import OUTPUT, ROOT
+from .common import ROOT
 from .style import (ACCENT, ACCENT_SOFT, G1, G2, G3, GRID, INK, INK2, PANEL, card, rounded_bar, x_grid)
 
 ASSETS = os.path.join(ROOT, 'assets')
@@ -23,24 +21,13 @@ WIDE = 7.16                # inches; every figure shares this width so they alig
 RGB_FLOW_BASELINE = 91.9   # P-CNN, Perera et al. 2018, official splits
 
 
-def load_results(from_runs):
-    if not from_runs:
-        with open(os.path.join(ROOT, 'results', 'paper.json')) as f:
-            return json.load(f)
-    merged = {'train': {}}
-    for path in glob.glob(os.path.join(OUTPUT, '*.json')):
-        with open(path) as f:
-            data = json.load(f)
-        key = os.path.basename(path)[:-5]
-        if key.startswith('train'):
-            merged['train'].update(data)
-        else:
-            merged[key] = data
-    return merged
+def load_results():
+    with open(os.path.join(ROOT, 'results', 'paper.json')) as f:
+        return json.load(f)
 
 
 def video_pct(entry):
-    return 100 * (np.mean(entry['video']) if 'video' in entry else entry['video_mean'])
+    return 100 * entry['video']
 
 
 def reference_pose():
@@ -133,8 +120,9 @@ def augmentation(K):
 
 
 def ablation(R):
-    t, b = R['train'], R.get('baselines', {})
+    t = b = R['models']
     rows = [('Frame classifier (random forest)', b.get('frame_rf'), G1, 'Without temporal modelling'),
+            ('Frame classifier (perceptron)', b.get('frame_mlp'), G1, None),
             ('Window classifier (random forest)', b.get('window_rf'), G1, None),
             ('Stacked LSTM, image coordinates', t.get('stacked_lstm_image'), G2, 'Building the proposed model'),
             ('+ body-centred keypoints', t.get('stacked_lstm_body'), G2, None),
@@ -143,7 +131,7 @@ def ablation(R):
             ('Temporal convolutional network', t.get('tcn'), G1, 'Alternative temporal models'),
             ('Spatio-temporal graph network', t.get('stgcn'), G1, None)]
     rows = [r for r in rows if r[1] is not None]
-    fig = plt.figure(figsize=(WIDE, 2.9))
+    fig = plt.figure(figsize=(WIDE, 3.15))
     card(fig)
     ax = fig.add_axes([0.335, 0.12, 0.6, 0.78])
     ys, y = [], 0
@@ -175,10 +163,14 @@ def ablation(R):
     save(fig, 'ablation')
 
 
+SERIES = [('stacked_lstm_body', 'Stacked LSTM', G1, 1.0, 7, '-'), ('lstm_no_aug', 'No augmentation', G2, 1.0, 7, '-'),
+          ('tcn', 'TCN', G3, 0.9, 5, (0, (3, 1.5))), ('stgcn', 'ST-GCN', G3, 0.9, 5, (0, (1, 1.2))),
+          ('lstm', 'Proposed', ACCENT, 1.6, 12, '-')]
+
+
 def robustness(R):
     rob = R['robustness']
-    series = [('stacked_lstm_body', 'Stacked LSTM', G1, 1.0, 7), ('lstm_no_aug', 'No augmentation', G2, 1.0, 7),
-              ('lstm', 'Proposed', ACCENT, 1.6, 12)]
+    series = SERIES
     panels = [('elevation', 'Camera elevation', lambda v: f'{v:.0f}°', [0, 20, 40, 60]),
               ('rotation', 'Camera roll', lambda v: f'{v:.0f}°', [0, 10, 20, 30]),
               ('dropout', 'Missing joints', lambda v: f'{100 * v:.0f}%', [0, 0.3, 0.7]),
@@ -188,7 +180,7 @@ def robustness(R):
     card(fig)
     for i, (kind, title, fmt, ticks) in enumerate(panels):
         ax = fig.add_axes([0.065 + i * 0.187, 0.16, 0.15, 0.56])
-        for name, label, col, lw, ms in series:
+        for name, label, col, lw, ms, ls in series:
             if name not in rob or kind not in rob[name]:
                 continue
             d = rob[name][kind]
@@ -196,7 +188,7 @@ def robustness(R):
             ys = [100 * d[next(k for k in d if float(k) == x)]['video'] for x in xs]
             if kind == 'fps':
                 ys, xs = ys[::-1], list(range(len(xs)))
-            ax.plot(xs, ys, color=col, lw=lw, solid_capstyle='round', zorder=3 if col == ACCENT else 2)
+            ax.plot(xs, ys, color=col, lw=lw, ls=ls, solid_capstyle='round', zorder=3 if col == ACCENT else 2)
             ax.scatter(xs, ys, s=ms, color=col, zorder=4, edgecolor='#1C1C1E', linewidth=0.4)
         ax.set_ylim(0, 100)
         ax.set_yticks([0, 50, 100])
@@ -210,20 +202,57 @@ def robustness(R):
             ax.set_xticks(ticks)
             ax.set_xticklabels([fmt(v) for v in ticks], fontsize=6.0)
         ax.set_title(title, fontsize=6.9, fontweight='semibold', loc='left', pad=5)
-    handles = [plt.Line2D([], [], color=c, lw=lw, marker='o', ms=3.2, mec='#1C1C1E', mew=0.4) for _, _, c, lw, _ in series]
-    fig.legend(handles, [s[1] for s in series], loc='upper left', bbox_to_anchor=(0.055, 0.95), ncol=3, fontsize=6.4,
-               handlelength=1.8, columnspacing=2.2, labelcolor=INK)
+    legend(fig, series)
     save(fig, 'robustness')
 
 
+def legend(fig, series):
+    handles = [plt.Line2D([], [], color=c, lw=lw, ls=ls, marker='o', ms=3.2, mec='#1C1C1E', mew=0.4)
+               for _, _, c, lw, _, ls in series]
+    fig.legend(handles, [s[1] for s in series], loc='upper left', bbox_to_anchor=(0.055, 0.95), ncol=5, fontsize=6.4,
+               handlelength=2.2, columnspacing=2.2, labelcolor=INK)
+
+
+def viewpoint(R):
+    vp = R['viewpoint']
+    elev = vp['elevations']
+    panels = [('squash', 'Training model'), ('perspective', 'Pinhole camera, flat body'),
+              ('limb_depth', 'Pinhole camera, limb depth')]
+    fig = plt.figure(figsize=(WIDE, 2.0))
+    card(fig)
+    for i, (view, title) in enumerate(panels):
+        ax = fig.add_axes([0.065 + i * 0.315, 0.16, 0.27, 0.56])
+        for name, label, col, lw, ms, ls in SERIES:
+            if name not in vp:
+                continue
+            ys = [100 * vp[name][view][str(float(e))]['video'] for e in elev]
+            ax.plot(elev, ys, color=col, lw=lw, ls=ls, solid_capstyle='round', zorder=3 if col == ACCENT else 2)
+            ax.scatter(elev, ys, s=ms, color=col, zorder=4, edgecolor='#1C1C1E', linewidth=0.4)
+        ax.set_ylim(0, 100)
+        ax.set_yticks([0, 50, 100])
+        ax.set_yticklabels(['0', '50', '100%'] if i == 0 else [], fontsize=6.0)
+        for tk in [0, 25, 50, 75, 100]:
+            ax.axhline(tk, color=GRID, lw=0.5, zorder=0)
+        ax.set_xticks([0, 30, 60])
+        ax.set_xticklabels(['0°', '30°', '60°'], fontsize=6.0)
+        ax.set_title(title, fontsize=6.9, fontweight='semibold', loc='left', pad=5)
+    legend(fig, SERIES)
+    save(fig, 'viewpoint')
+
+
+GATE_POLICIES = [('Act on every window', 'Act on every window', G2), ('Vote 3/4, p ≥ 0.8', 'Vote 3 of 4, p ≥ 0.8', G1),
+                 ('Gate 6/8, p ≥ 0.7', 'Gate 6 of 8, p ≥ 0.7', ACCENT_SOFT),
+                 ('Gate selected on training actors', 'Gate, selected on training actors', ACCENT)]
+
+
 def safety_gate(R):
-    colours = [G2, G1, ACCENT_SOFT, ACCENT]
-    policies = [(label, 100 * r['executed'], r['wrong_per_stream'], c)
-                for (label, r), c in zip(R['safety_gate'].items(), colours)]
+    G = R['gate']['policies']
+    policies = [(label, 100 * G[key]['executed']['mean'], G[key]['wrong_per_stream']['mean'], c)
+                for key, label, c in GATE_POLICIES if key in G]
     fig = plt.figure(figsize=(WIDE, 1.75))
     card(fig)
-    ax_l = fig.add_axes([0.25, 0.17, 0.33, 0.58])
-    ax_r = fig.add_axes([0.63, 0.17, 0.33, 0.58])
+    ax_l = fig.add_axes([0.27, 0.17, 0.32, 0.58])
+    ax_r = fig.add_axes([0.64, 0.17, 0.32, 0.58])
     for a in (ax_l, ax_r):
         a.set_ylim(len(policies) - 0.4, -0.6)
         a.set_yticks([])
@@ -240,7 +269,7 @@ def safety_gate(R):
         ax_r.text(wrong + 0.06 if wrong < 1 else wrong - 0.06, i, f'{wrong:.3f}' if wrong < 1 else f'{wrong:.2f}',
                   ha='left' if wrong < 1 else 'right', va='center', fontsize=6.6,
                   color=INK if wrong < 1 else 'white', zorder=4)
-        fig.text(0.23, ax_l.transData.transform((0, i))[1] / fig_h, label.replace('>=', '≥'), ha='right', va='center',
+        fig.text(0.25, ax_l.transData.transform((0, i))[1] / fig_h, label, ha='right', va='center',
                  fontsize=6.9, fontweight='semibold' if col == ACCENT else 'regular',
                  color=INK if col == ACCENT else INK2)
     ax_l.set_title('Intended command executed', loc='left', fontsize=6.9, pad=7)
@@ -251,11 +280,13 @@ def safety_gate(R):
 def highlights(R):
     """The four headline numbers as one strip."""
     lstm, no_aug = R['robustness']['lstm']['elevation'], R['robustness']['lstm_no_aug']['elevation']
-    gate = list(R['safety_gate'].values())
-    items = [(f"{video_pct(R['train']['lstm']):.1f}%", 'video accuracy on', 'unseen people'),
+    G = R['gate']['policies']
+    naive, gate = G['Act on every window'], G['Gate selected on training actors']
+    items = [(f"{video_pct(R['models']['lstm']):.1f}%", 'video accuracy on', 'unseen people'),
              (f"{100 * lstm['70.0']['video']:.1f}%", 'at 70° camera elevation', f"vs {100 * no_aug['70.0']['video']:.1f}% unaugmented"),
-             (f"{10 * round(gate[0]['wrong_per_stream'] / gate[-1]['wrong_per_stream'] / 10)}×", 'fewer wrong actions', 'with the safety gate'),
-             (f"{R['benchmark']['lstm']['ms_per_window']:.1f} ms", 'per decision on', 'one CPU thread')]
+             (f"{naive['wrong_per_stream']['mean']:.1f} → {gate['wrong_per_stream']['mean']:.2f}", 'wrong actions per stream',
+              'with the safety gate'),
+             (f"{R['timing']['recogniser_ms_per_decision_median']:.1f} ms", 'per decision on', 'a laptop CPU')]
     fig = plt.figure(figsize=(WIDE, 1.15))
     card(fig)
     ax = fig.add_axes([0, 0, 1, 1])
@@ -274,21 +305,16 @@ def highlights(R):
 
 
 def main():
-    p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--from-runs', action='store_true')
-    args = p.parse_args()
-    R = load_results(args.from_runs)
+    argparse.ArgumentParser(description=__doc__).parse_args()
+    R = load_results()
     K = reference_pose()
     pipeline(K)
     augmentation(K)
-    if 'train' in R and R['train']:
-        ablation(R)
-    if 'robustness' in R:
-        robustness(R)
-    if all(k in R for k in ('train', 'robustness', 'safety_gate', 'benchmark')):
-        highlights(R)
-    if 'safety_gate' in R:
-        safety_gate(R)
+    ablation(R)
+    robustness(R)
+    viewpoint(R)
+    safety_gate(R)
+    highlights(R)
 
 
 if __name__ == '__main__':

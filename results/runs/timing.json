@@ -1,0 +1,10 @@
+{
+ "machine": "Darwin arm64",
+ "processor": "arm",
+ "frames": 862,
+ "person_detected": 1.0,
+ "pose_ms_median": 18.15752098627854,
+ "recogniser_ms_per_decision_median": 2.0800000056624413,
+ "decisions": 167,
+ "pose_fps": 55.073597368037746
+}

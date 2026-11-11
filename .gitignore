@@ -4,6 +4,6 @@ __pycache__/
 venv/
 .DS_Store
 *.egg-info/
-data/
-runs/
+/data/
+/runs/
 demo/pose_landmarker_lite.task

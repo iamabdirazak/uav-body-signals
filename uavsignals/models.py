@@ -96,6 +96,23 @@ class STGCN(nn.Module):
         return self.head(self.blocks(x.reshape(B, self.channels, T, NUM_JOINTS)).mean((2, 3)))
 
 
+class Standardised(nn.Module):
+    """Z-scores each input feature with statistics from the training set, then applies the network."""
+
+    def __init__(self, net, input_dim):
+        super().__init__()
+        self.net = net
+        self.register_buffer('mean', torch.zeros(input_dim))
+        self.register_buffer('std', torch.ones(input_dim))
+
+    def fit(self, X):
+        self.mean.copy_(X.mean(0))
+        self.std.copy_(X.std(0) + 1e-6)
+
+    def forward(self, x):
+        return self.net((x - self.mean) / self.std)
+
+
 ARCHITECTURES = {'lstm': SignalLSTM, 'stacked_lstm': StackedLSTM, 'tcn': TCN, 'stgcn': STGCN}
 
 

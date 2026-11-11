@@ -14,7 +14,7 @@ from uavsignals.constants import WINDOW
 from uavsignals.features import normalise, to_features
 from uavsignals.protocol import FOLDS, fold
 
-from .common import load, mean_std, parser, save_json
+from .common import load, parser, save_json
 
 
 def windows(video, stride):
@@ -25,29 +25,32 @@ def windows(video, stride):
     return np.stack([f[i:i + WINDOW] for i in range(0, len(f) - WINDOW + 1, stride)])
 
 
-def classifier(name):
+def classifier(name, seed):
     if name == 'frame_mlp':
-        return MLPClassifier((128, 64), max_iter=400, random_state=0)
-    return RandomForestClassifier(300, n_jobs=-1, random_state=0)
+        return MLPClassifier((128, 64), max_iter=400, random_state=seed)
+    return RandomForestClassifier(300, n_jobs=-1, random_state=seed)
 
 
 def main():
-    args = parser(__doc__).parse_args()
+    p = parser(__doc__)
+    p.add_argument('--seeds', nargs='*', type=int, default=[0, 1, 2, 3, 4])
+    args = p.parse_args()
     videos = load(args)
     results = {}
     for name in ['frame_rf', 'frame_mlp', 'window_rf']:
-        window_acc, video_acc = [], []
-        for k in FOLDS:
+        runs = []
+        for seed, k in [(s, k) for s in args.seeds for k in FOLDS]:
             train_names, test_names = fold(videos, k)
             X = [windows(videos[n], 5) for n in train_names]
             y = np.concatenate([np.full(len(w), videos[n].label) for n, w in zip(train_names, X)])
             X = np.concatenate(X)
-            clf = classifier(name)
+            clf = classifier(name, seed)
             if name.startswith('frame'):
                 clf.fit(X[:, WINDOW // 2], y)            # one frame per training window
             else:
                 clf.fit(X.reshape(len(X), -1), y)
-            correct_w = total_w = correct_v = 0
+            correct_w = total_w = 0
+            predictions = {}
             for n in test_names:
                 W = windows(videos[n], 15)
                 if name.startswith('frame'):
@@ -57,11 +60,13 @@ def main():
                 label = videos[n].label
                 correct_w += (P.argmax(1) == label).sum()
                 total_w += len(P)
-                correct_v += P.mean(0).argmax() == label
-            window_acc.append(float(correct_w / total_w))
-            video_acc.append(float(correct_v / len(test_names)))
-        results[name] = dict(window=window_acc, video=video_acc)
-        print(f'{name:10s} window {mean_std(window_acc)}  video {mean_std(video_acc)}', flush=True)
+                predictions[n] = int(P.mean(0).argmax())
+            video = sum(predictions[n] == videos[n].label for n in test_names) / len(test_names)
+            runs.append(dict(seed=seed, fold=k, window=float(correct_w / total_w), video=float(video),
+                             predictions=predictions))
+            print(f'{name:10s} seed {seed} fold {k}: video {100 * video:.1f}%', flush=True)
+        results[name] = dict(runs=runs)
+        save_json(results, 'baselines.json', quiet=True)
     save_json(results, 'baselines.json')
 
 

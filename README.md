@@ -1,6 +1,6 @@
 # Body-Signal Recognition for Commanding Drones in Search and Rescue
 
-In search and rescue, a responder on the ground may need to direct a drone without a radio or controller. This system lets them use the body signals ground crews already use to guide aircraft, recognised through the drone's own camera. It keeps working when the drone looks down at steep angles, and acts only when it is sure.
+In search and rescue, a responder on the ground may need to direct a drone without a radio or controller. This system lets them use the body signals ground crews already use to guide aircraft, recognised through the drone's own camera. It keeps working as the drone's viewpoint changes, and acts only when the evidence is consistent.
 
 <img src="assets/demo.png" alt="The live demo: guidance on the left, the tracked skeleton in the centre, the recognised signal and the safety gate's state on the right." width="100%">
 
@@ -13,11 +13,11 @@ In search and rescue, a responder on the ground may need to direct a drone witho
 
 During a rescue, a responder may need a drone to hold position over a casualty, change altitude, land or abort, often with their hands busy, gloves on, or no controller within reach. Aviation already has a vocabulary for this: the standardised aircraft-handling signals that ground crews use to direct aircraft. This project teaches a drone to read those signals from its own camera.
 
-To be useful in the field, the system has to recognise people it has never seen, keep working as the drone's viewpoint changes, never act on a misread signal, and run on the drone's own hardware. Each of these is handled by one part of a deliberately small design. Describing the body by its own keypoints lets a compact recurrent network generalise to new people. Training on simulated drone viewpoints keeps it accurate when the camera looks steeply down. A safety gate turns signals into commands only when the evidence is consistent. And because the whole chain works on 14 keypoints rather than images, it needs only milliseconds of a single CPU core.
+To be useful in the field, the system has to recognise people it has never seen, keep working as the drone's viewpoint changes, rarely act on a misread signal, and run on the drone's own hardware. Each of these is handled by one part of a deliberately small design. Describing the body by its own keypoints lets a compact recurrent network generalise to new people. Training on simulated drone viewpoints keeps it accurate when the camera looks steeply down. A safety gate turns signals into commands only when the evidence is consistent. And because the whole chain works on 14 keypoints rather than images, it needs only milliseconds of a single CPU core.
 
-<img src="assets/highlights.png" alt="91.2% video accuracy on unseen people; 86.0% at 70° camera elevation versus 38.4% unaugmented; 160 times fewer wrong actions with the safety gate; 2.8 ms per decision on one CPU thread." width="100%">
+<img src="assets/highlights.png" alt="90.5% video accuracy on unseen people; 85.4% at 70° camera elevation versus 29.5% unaugmented; wrong actions per stream fall from 4.6 to 0.05 with the safety gate; 2.1 ms per decision on a laptop CPU." width="100%">
 
-<sub>One number for each requirement, in the same order. Offline evaluation on recorded aerial video, tested on people the model never saw in training.</sub>
+<sub>One number for each requirement, in the same order. Offline evaluation on recorded aerial video, tested on people the model never saw in training, mean of five training seeds.</sub>
 
 ## How it works
 
@@ -37,7 +37,7 @@ The system is a chain of small, independent modules, joined by one simple interf
 
 4. **Temporal model.** A two-layer LSTM reads the window and classifies it as one of 13 signals: *all clear, have command, hover, land, landing direction, move ahead, move downward, move to left, move to right, move upward, not clear, slow down* and *wave off*. It reads time in one direction only, so on board it can update frame by frame.
 
-5. **Safety gate.** Every 0.2 seconds, the gate accepts a signal only when it wins 6 of the last 8 windows with mean confidence of at least 0.7. The responder first signals *have command* to arm the gate, and the next accepted signal is executed. *Wave off* always goes through, so an abort is never delayed.
+5. **Safety gate.** Every 0.2 seconds, the gate accepts a signal only when it wins 6 of the last 8 windows with mean confidence of at least 0.7. The responder first signals *have command* to arm the gate, and the next accepted signal is executed. *Wave off* is accepted without arming, so an abort is never held back by the attention step, but it still has to pass the same vote.
 
 ### Viewpoint augmentation
 
@@ -49,42 +49,54 @@ The training videos were filmed by a drone hovering at low altitude in front of 
 
 ## Results
 
-The system was evaluated on [UAV-GESTURE](https://asankagp.github.io/uavgesture), a public dataset of 119 videos recorded from a hovering drone, in which eight people, filmed under 11 actor IDs, perform the 13 signals. Every result is measured on people the model never saw in training: the actor IDs are split into three groups, and each group is held out once while the model is trained on the rest ([Evaluation protocol](#evaluation-protocol)). The evaluation asks three questions in turn. How accurately are signals recognised from keypoints alone? How well does recognition hold up under the conditions a drone would face in the field? And how often would the drone act wrongly once predictions become commands? All three are answered offline, on recorded video, and every number can be reproduced with the scripts in this repository.
+The system was evaluated on [UAV-GESTURE](https://asankagp.github.io/uavgesture), a public dataset of 119 videos recorded from a hovering drone, in which eight people, filmed under 11 actor IDs, perform the 13 signals. Every result is measured on people the model never saw in training: the actor IDs are split into three groups, and each group is held out once while the model is trained on the rest ([Evaluation protocol](#evaluation-protocol)). Each model is trained with five random seeds, and numbers are the mean over seeds. The evaluation asks four questions in turn. How accurately are signals recognised from keypoints alone? How well does recognition hold up under the conditions a drone would face? Does it carry over to real oblique footage of other people? And how often would the drone act wrongly once predictions become commands? All are answered offline, on recorded video, and every number can be reproduced with the scripts in this repository.
 
 ### Recognition
 
-Describing keypoints relative to the body is what makes the task learnable from a moving camera: the same network goes from 15.8% to 82.9%. Velocities and augmentation then bring a keypoint-only model to 91.2%, level with a baseline that also uses colour images and optical flow.
+Describing keypoints relative to the body is the step that matters most: the same network goes from 74.0% on image coordinates to 82.8%, a significant gain. Velocities and a two-layer LSTM bring a keypoint-only model to 88.6%, and viewpoint augmentation to 90.5 ± 1.5%, comparable to a baseline that also uses colour images and optical flow. On these clean test videos the gain from augmentation, and the differences between the LSTM, TCN and ST-GCN, are within the spread between seeds. The value of augmentation shows when the viewpoint changes.
 
-<img src="assets/ablation.png" alt="Video accuracy for each model, from 15.8% for image coordinates to 91.2% for the proposed model." width="100%">
+<img src="assets/ablation.png" alt="Video accuracy for each model, from 74.0% for image coordinates to 90.5% for the proposed model." width="100%">
 
-<sub>Video accuracy, mean of three folds. The dashed line is the RGB and optical-flow baseline reported with the dataset.</sub>
+<sub>Video accuracy, mean of five seeds over three actor-disjoint folds. The dashed line is the RGB and optical-flow baseline reported with the dataset. Confidence intervals and paired tests are in [`results/paper.json`](results/paper.json).</sub>
 
 ### Robustness
 
-Viewpoint is the main way recognition fails. As the simulated camera tilts down to 70°, models trained without augmentation fall to between 21% and 38%, while the proposed model holds at 86%. Missing joints and low pose rates barely matter. Heavy keypoint noise is the remaining weakness.
+Viewpoint is the main way recognition fails. As the simulated camera tilts down to 70°, models trained without augmentation fall to between 23% and 30%, while the proposed model holds at 85%. The TCN, trained with the same features and augmentation, is just as robust, so robustness comes from the features and the augmentation rather than the choice of network. Missing joints and low pose rates barely matter. Heavy keypoint noise is the remaining weakness, and there augmentation does not help.
 
 <img src="assets/robustness.png" alt="Accuracy against camera elevation, roll, missing joints, keypoint noise and pose rate." width="100%">
 
 <sub>Video accuracy as each condition is applied to test keypoints, without retraining. Training covered elevation up to 60°, roll up to 10°, dropout up to 30% and noise up to 0.08 torso lengths.</sub>
 
+### Beyond the training model
+
+The test above uses the same model of elevation as training, so it mainly shows that the network learned that model. To look past it, each test clip is also viewed through a pinhole camera 10 m away, which training never sees. With the body kept flat, so that only perspective changes, accuracy stays at 86.5% at 70°. When the arms are given depth toward the camera, it falls to 51.8% at 45°, and every model behaves the same way. Depth in the signalling arms is the limit of this augmentation.
+
+<img src="assets/viewpoint.png" alt="Accuracy against camera elevation under the training model, a pinhole camera with a flat body, and a pinhole camera with limb depth." width="100%">
+
+<sub>Test-only camera models. The classifier still receives 2D keypoints.</sub>
+
+### Real aerial footage
+
+On [UAV-Human](https://sutdcv.github.io/uav-human-web/), filmed from a drone 2 to 8 m up with a different pose estimator, the model recognises 55.1% of 1,908 clips of the same 13 signals from 111 people, without retraining. Chance is 7.7%. This is well below its accuracy on UAV-GESTURE, but much of what it learned carries over to new people, a new viewpoint and a new pose estimator.
+
 ### Safety
 
-Acting on every prediction executes the intended command almost every time, but adds nearly five wrong actions per stream. The gate cuts wrong actions to 0.03, about 160 times fewer, at the cost of 1 s of extra latency and some missed commands.
+Acting on every prediction executes the intended command almost every time, but adds 4.6 wrong actions per stream. With settings chosen on the training actors only, the gate cuts this to 0.05, at the cost of some missed commands and a rise in median latency from 2.0 s to 3.0 s. On 354 minutes of everyday motion from UAV-Human, such as walking, waving and pointing, it reduces false commands from 34.9 to 0.35 per minute.
 
 <img src="assets/safety_gate.png" alt="Executed commands and wrong actions per stream for four gate policies." width="100%">
 
-<sub>168 command streams from unseen actors. k/n is the number of windows that must agree out of the last n, and p is the confidence threshold. The settings were chosen with the test streams in view, so read them as a trade-off rather than a tuned optimum.</sub>
+<sub>168 command streams from unseen actors per seed. k of n is the number of windows that must agree out of the last n, and p is the confidence threshold. The last row uses, for each fold, the setting chosen on that fold's training actors.</sub>
 
 ## Limitations
 
 These results describe a method evaluated offline, not a system proven in flight.
 
 - **Offline evaluation.** All experiments use recorded video. There was no flight test, and closed-loop latency was not measured.
-- **Simulated viewpoint.** The dataset was filmed at low altitude, so elevation, roll and keypoint degradation were simulated on keypoints with a first-order model that ignores depth.
+- **Viewpoint.** UAV-GESTURE was filmed at low altitude, so oblique views and keypoint degradation were simulated. Depth in the signalling arms is not modelled in training and is the clearest weakness.
 - **Conditions not tested.** Lighting, weather, smoke, rotor downwash, long range and thermal imagery all act on the pose estimator, and none were evaluated.
-- **No "other movement" class.** The model always outputs one of the 13 signals. The attention signal is the only guard against everyday motion being read as a command, and there is no way yet to pick out an authorised signaller among several people.
-- **Hand shape is not used.** Signals that differ mainly in the hands are confused. *Not clear* is mistaken for *all clear* in 4 of 9 videos.
-- **Small dataset.** UAV-GESTURE has 11 actor IDs from 8 people at one site, and each result comes from one training run per fold.
+- **No "other movement" class.** The model always outputs one of the 13 signals. The gate removes most false commands from everyday motion but not all of them, and there is no way yet to pick out an authorised signaller among several people.
+- **Hand shape is not used.** Signals that differ mainly in the hands are confused. *Not clear* is recognised in only half of its videos and is mostly mistaken for *all clear*.
+- **Small dataset.** UAV-GESTURE has 11 actor IDs from 8 people at one site.
 - **Intended users.** The signals are meant for trained responders. People in distress use different ground-to-air conventions.
 
 ---
@@ -106,6 +118,12 @@ The tests need no data and finish in seconds. To run the experiments, also downl
 bash scripts/get_data.sh
 ```
 
+The test on real aerial footage also needs the skeleton data of [UAV-Human](https://sutdcv.github.io/uav-human-web/), which is available for non-commercial research and cannot be redistributed. Download `Skeleton.zip` from its website and convert it once:
+
+```bash
+python scripts/prepare_uavhuman.py ~/Downloads/Skeleton.zip data/uavhuman_skeletons.npz
+```
+
 <details>
 <summary><b>Repository layout</b></summary>
 
@@ -117,8 +135,8 @@ bash scripts/get_data.sh
 | `experiments/` | One script per result in the paper, and the figure generator |
 | `demo/` | Live webcam demo: camera, pose estimation and the window |
 | `weights/` | The released model, trained on all actors |
-| `results/` | Every number in the paper, and a re-run on another machine |
-| `scripts/` | Data download |
+| `results/` | Every number in the paper, and the experiment outputs it was built from |
+| `scripts/` | Data download and preparation, and one script that runs every experiment |
 | `tests/` | Fast checks that need no dataset |
 
 </details>
@@ -161,40 +179,34 @@ for t, keypoints, visible in pose_stream():        # seconds, (14, 2) pixels, (1
 Each result also carries the class probabilities (`out.probs`), the most likely signal (`out.signal`) and the gate's state (`out.armed`).
 
 - **Keypoints.** Supply 14 joints in COCO body order without eyes and ears: nose and neck; right shoulder, elbow and wrist; left shoulder, elbow and wrist; right hip, knee and ankle; left hip, knee and ankle. If your estimator has no neck joint, use the midpoint of the shoulders.
-- **Frame rate.** The pose estimator sets the frame rate, not the classifier, which needs about 3 ms per decision. Accuracy holds down to 3 fps. Run `python -m experiments.benchmark` to measure your device.
+- **Frame rate.** The pose estimator sets the frame rate, not the classifier, which needs about 2 ms per decision. Accuracy holds down to 3 fps. Run `python demo/benchmark.py` to time the whole pipeline on your device.
 - **Gate settings.** Pass `k`, `n` and `tau` to `from_pretrained` to make the gate stricter or more responsive.
 - **Retraining.** For a different pose estimator or new signals, retrain with [`training.py`](uavsignals/training.py). The released model was trained on all 119 videos, so its own accuracy can't be measured on this dataset; the fold results describe the method.
 
 ## Reproduce the paper
 
-Each result in the paper has one command. Scripts write their numbers to `runs/results/` and their checkpoints to `runs/checkpoints/`.
+Each result in the paper has one command, and `bash scripts/run_all.sh` runs them all in order. Scripts write their numbers to `runs/results/` and their checkpoints to `runs/checkpoints/`. Training can be stopped and restarted, and finished runs are skipped.
 
 | Result | Command | Time |
 |:--|:--|:--|
-| Recognition, all models | `python -m experiments.train` | ~45 min |
-| Recognition, proposed model only | `python -m experiments.train lstm` | ~7 min |
-| Non-temporal baselines | `python -m experiments.baselines` | ~4 min |
-| Robustness | `python -m experiments.robustness` | ~1 min |
-| Safety gate | `python -m experiments.safety_gate` | seconds |
+| Recognition, all models, five seeds | `python -m experiments.train` | ~3 h |
+| Recognition, proposed model only | `python -m experiments.train lstm` | ~25 min |
+| Non-temporal baselines | `python -m experiments.baselines` | ~20 min |
+| Robustness | `python -m experiments.robustness` | ~5 min |
+| Camera models beyond training | `python -m experiments.viewpoint` | ~5 min |
+| Safety gate | `python -m experiments.safety_gate` | ~1 min |
+| Real aerial footage (UAV-Human) | `python -m experiments.uavhuman` | ~5 min |
+| Dataset statistics | `python -m experiments.dataset_stats` | seconds |
 | Model size and speed | `python -m experiments.benchmark` | seconds |
-| Figures from your runs | `python -m experiments.figures --from-runs` | seconds |
+| Summary and figures | `python -m experiments.summary && python -m experiments.figures` | seconds |
 
-<sub>Times are for a 2-core CPU. Robustness and the safety gate use the checkpoints written by training.</sub>
+<sub>Times are for a 2-core CPU. Robustness, the camera models, the safety gate and UAV-Human use the checkpoints written by training.</sub>
 
-Training is seeded, but results still shift slightly with the PyTorch version and the processor. As a check, the code was re-run on a different machine from the paper's (Linux, 2 CPU cores, PyTorch 2.15):
-
-| Result | Paper | Re-run |
-|:--|:--|:--|
-| Proposed model, video accuracy | 91.2 ± 2.1% | 90.2 ± 1.0% |
-| Non-temporal baselines | 75.0, 75.0, 84.7% | Identical |
-| Safety gate, 6/8 at p ≥ 0.7 | 82.1% executed, 0.030 wrong, 3.0 s | Identical |
-| Proposed model at 70° elevation | 86.0% | 90.2% |
-
-<sub>For the proposed model, folds 1 and 2 match exactly and fold 3 differs by one of 33 test videos. Both sets of numbers are in [`results/`](results).</sub>
+Training is seeded, but results still shift slightly with the PyTorch version and the processor. The outputs behind the paper are kept in [`results/runs`](results/runs), and [`results/paper.json`](results/paper.json) summarises them.
 
 ### Evaluation protocol
 
-All results use three actor-disjoint folds, with test actors {S13, S14, S15}, {S1, S3, S4} and {S5, S6, S9}. Folds 2 and 3 are the dataset's official splits. Official split 1 lists actor S12 in both training and test, so all S12 videos are moved to training ([`protocol.py`](uavsignals/protocol.py)). Video accuracy averages the window probabilities over each clip. Each configuration is trained once per fold with seed 0, and no hyperparameters were tuned.
+All results use three actor-disjoint folds, with test actors {S13, S14, S15}, {S1, S3, S4} and {S5, S6, S9}. Folds 2 and 3 are the dataset's official splits. Official split 1 lists actor S12 in both training and test, so all S12 videos are moved to training ([`protocol.py`](uavsignals/protocol.py)). Video accuracy averages the window probabilities over each clip. Each configuration is trained with five seeds on each fold, accuracy is pooled over the 93 test videos for each seed, and results are reported as the mean over seeds with a 95% confidence interval. Models are compared with a paired sign-flip test on per-video accuracy. Safety gate settings are chosen for each fold on its training actors only, and no hyperparameters were tuned.
 
 ## Citation
 
@@ -226,6 +238,6 @@ This repository implements the paper *Toward Viewpoint-Robust Body-Signal Recogn
 
 ## Acknowledgements
 
-This work builds on the first author's undergraduate final-year project at UCSI University, Malaysia. We thank A. G. Perera, Y. W. Law and J. Chahl for releasing UAV-GESTURE and its keypoints, from which the demo's reference poses are also derived.
+This work builds on the first author's undergraduate final-year project at UCSI University, Malaysia. We thank A. G. Perera, Y. W. Law and J. Chahl for releasing UAV-GESTURE and its keypoints, from which the demo's reference poses are also derived, and the authors of UAV-Human for making their dataset available for research.
 
-The code is released under the [MIT License](LICENSE). The UAV-GESTURE data has its own terms, set by its authors.
+The code is released under the [MIT License](LICENSE). UAV-GESTURE and UAV-Human have their own terms, set by their authors.
