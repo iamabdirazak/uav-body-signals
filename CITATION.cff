@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the paper below."
+title: "uavsignals: viewpoint-robust body-signal recognition for commanding UAVs"
+version: 1.0.0
+license: MIT
+authors:
+  - family-names: Muhumed
+    given-names: Abdirisak Mubarik
+preferred-citation:
+  type: conference-paper
+  title: "Toward Viewpoint-Robust Body-Signal Recognition for Commanding UAVs in Search and Rescue"
+  authors:
+    - family-names: Muhumed
+      given-names: Abdirisak Mubarik
+    - family-names: Sariff
+      given-names: Nohaidda
+    - family-names: Saruchi
+      given-names: "Sarah 'Atifah"
+    - family-names: Mohd Tahir
+      given-names: Noor Idayu
+  collection-title: "IEEE International Conference on Underwater System Technology: Theory and Applications (USYS)"
+  year: 2026
