@@ -8,22 +8,14 @@ In search and rescue, a responder on the ground may need to direct a drone witho
 
 [![IEEE USYS 2026](https://img.shields.io/badge/IEEE-USYS%202026-1c1c1e?style=flat-square)](#citation)
 [![License: MIT](https://img.shields.io/badge/License-MIT-1c1c1e?style=flat-square)](LICENSE)
-    
-<br>
-
-<img src="assets/highlights.png" alt="91.2% video accuracy on unseen people; 86.0% at 70° camera elevation versus 38.4% unaugmented; 160 times fewer wrong actions with the safety gate; 2.8 ms per decision on one CPU thread." width="100%">
-
-<sub>Offline evaluation on recorded aerial video, tested on people the model never saw in training.</sub>
 
 ## Overview
 
 During a rescue, a responder may need a drone to hold position over a casualty, change altitude, land or abort, often with their hands busy, gloves on, or no controller within reach. Aviation already has a vocabulary for this: the standardised aircraft-handling signals that ground crews use to direct aircraft. This project teaches a drone to read those signals from its own camera.
 
-Reading them from the air is harder than reading them from the ground, for three reasons:
+<img src="assets/highlights.png" alt="91.2% video accuracy on unseen people; 86.0% at 70° camera elevation versus 38.4% unaugmented; 160 times fewer wrong actions with the safety gate; 2.8 ms per decision on one CPU thread." width="100%">
 
-- **The camera moves.** The person drifts around the frame and is seen from changing heights and distances.
-- **The viewpoint is oblique.** A drone looks down at the body, which foreshortens it and changes the shape of every signal.
-- **A wrong command is worse than a late one.** For an aircraft near people, acting on a misread signal is the failure that matters.
+<sub>Offline evaluation on recorded aerial video, tested on people the model never saw in training.</sub>
 
 The approach is deliberately small. Each person is reduced to 14 body keypoints and described relative to their own body. A compact recurrent network classifies 1.2 seconds of movement, trained on simulated drone viewpoints. A safety gate then turns recognised signals into commands only when the evidence is consistent. The result runs on a single CPU core alongside any pose estimator, and it is the implementation behind the paper *Toward Viewpoint-Robust Body-Signal Recognition for Commanding UAVs in Search and Rescue* (IEEE USYS 2026).
 
