@@ -13,4 +13,3 @@ python -m experiments.safety_gate
 if [ -f data/uavhuman_skeletons.npz ]; then python -m experiments.uavhuman; fi
 python -m experiments.benchmark
 python -m experiments.summary
-python -m experiments.figures

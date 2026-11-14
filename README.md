@@ -16,14 +16,14 @@ The recogniser works on 14 body keypoints rather than images, so it runs with an
 
 ## How it works
 
-<img src="assets/pipeline.png" alt="Pipeline: camera stream, pose estimation, body-centred features, temporal model, safety gate." width="100%">
+<img src="assets/architecture.png" alt="Architecture: input, estimation, sequencing, augmentation (training only), normalisation, classification, gating, output." width="100%">
 
-1. **Pose estimation.** A pose estimator finds 14 body joints in each frame. Any estimator works.
-2. **Features.** Every 0.2 s, the last 1.2 s of keypoints is centred on the neck and scaled by torso length, so position in the frame and distance to the camera no longer matter. Joint velocities are added.
-3. **Classifier.** A two-layer LSTM with 229k parameters reads the window and gives a probability for each of the 13 signals.
-4. **Safety gate.** A signal is accepted when it wins 6 of the last 8 windows with a mean confidence of at least 0.7. *Have command* arms the gate and the next accepted signal is executed. *Wave off* aborts at any time without arming, but it still has to pass the same vote.
-
-During training, each window is also shown as a drone might have seen it, tilted, rolled, with missing joints or at a lower frame rate. This is what keeps recognition working as the camera looks down. Nothing is changed at test time.
+1. **Estimation.** A pose estimator finds 14 body joints in each camera frame. Any 2D estimator works.
+2. **Sequencing.** Every 0.2 s, the last 30 frames (1.2 s) form one window, so consecutive windows overlap.
+3. **Augmentation.** During training only, each window is shown as a drone might have seen it, tilted, rolled, with missing joints or at a lower frame rate. This is what keeps recognition working as the camera looks down.
+4. **Normalisation.** Missing joints are filled in over time, and the keypoints are centred on the neck and scaled by torso length, so position in the frame and distance to the camera no longer matter. Joint velocities are added.
+5. **Classification.** A two-layer LSTM with 229k parameters reads the window and gives a probability for each of the 13 signals.
+6. **Gating.** A signal is accepted when it wins 6 of the last 8 windows with a mean confidence of at least 0.7. *Have command* arms the gate and the next accepted signal becomes a flight command. *Wave off* aborts at any time without arming, but it still has to pass the same vote.
 
 ## Getting started
 
