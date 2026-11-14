@@ -1,4 +1,4 @@
-"""Non-temporal baselines (Table I, top rows).
+"""Non-temporal baselines.
 
   frame_rf    random forest on single frames; a window's prediction is the mean of its frames
   frame_mlp   the same with a 128-64 multilayer perceptron

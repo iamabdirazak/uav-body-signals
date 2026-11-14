@@ -1,4 +1,4 @@
-"""Viewpoint test with camera models that training never saw (Fig. 4).
+"""Viewpoint test with camera models that training never saw.
 
 Each test clip is viewed from a camera raised to a given elevation, in three ways:
 

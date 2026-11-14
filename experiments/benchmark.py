@@ -1,4 +1,4 @@
-"""Model size and inference time per 30-frame window, batch 1, one CPU thread (Table I, right columns).
+"""Model size and inference time per 30-frame window, batch 1, one CPU thread.
 
 Needs no data. Run it on the hardware you plan to deploy on.
 

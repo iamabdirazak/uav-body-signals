@@ -1,6 +1,6 @@
 """Training, prediction and evaluation on the UAV-GESTURE folds.
 
-The configurations form the comparison in Table I of the paper. Every model is trained with the
+The configurations form the model comparison in the paper. Every model is trained with the
 same schedule (35 epochs) and no hyperparameter tuning, once per fold and seed.
 """
 from dataclasses import dataclass

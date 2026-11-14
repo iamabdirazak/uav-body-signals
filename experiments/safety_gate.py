@@ -1,4 +1,4 @@
-"""Streaming evaluation of the safety gate on command streams from unseen actors (Fig. 5).
+"""Streaming evaluation of the safety gate on command streams from unseen actors.
 
 Each test actor's `have command` clip is joined to each of that actor's other clips to form an armed
 stream (the operator asks for attention, then signals X). Each other clip alone forms an unarmed
@@ -10,8 +10,9 @@ training actors: their streams, scored by the models of the other folds, which n
 rule is fixed in advance. Among settings with at most 0.05 wrong actions per stream, take the one that
 executes the most intended commands, then the lowest latency.
 
-The script also reports false wave-offs, a lighter vote for wave off (2 of the last 3 windows), and
-which wrong commands were executed, grouped by what they would make the drone do.
+The script also reports false wave-offs, a lighter vote for wave off (2 of the last 3 windows), which
+wrong commands were executed, grouped by what they would make the drone do, and how each stream ends
+(the intended command alone, the intended command plus a wrong one, a wrong one only, or nothing).
 
     python -m experiments.safety_gate
 """
@@ -115,6 +116,21 @@ def summarise(records):
     )
 
 
+def stream_outcomes(records):
+    """Share of armed and unarmed streams ending in each outcome, for one seed."""
+    armed = [r for r in records if r['armed']]
+    unarmed = [r for r in records if not r['armed']]
+    share = lambda rs, test: float(np.mean([test(r) for r in rs]))
+    return dict(
+        armed_clean=share(armed, lambda r: r['hit'] and not r['wrong']),
+        armed_hit_wrong=share(armed, lambda r: r['hit'] and bool(r['wrong'])),
+        armed_wrong_only=share(armed, lambda r: not r['hit'] and bool(r['wrong'])),
+        armed_none=share(armed, lambda r: not r['hit'] and not r['wrong']),
+        unarmed_clean=share(unarmed, lambda r: not r['wrong']),
+        unarmed_wrong=share(unarmed, lambda r: bool(r['wrong'])),
+    )
+
+
 def across_seeds(per_seed):
     """Mean and 95% interval across seeds for each scalar metric; counts are summed."""
     out = {}
@@ -159,34 +175,39 @@ def main():
     n_streams = sum(len(streams[(seeds[0], k)]) for k in FOLDS)
     print(f'{len(seeds)} seeds, {n_streams} streams per seed\n')
 
-    results, chosen = {}, {}
+    records, chosen = {}, {}           # label -> one list of stream records per seed
     policies = dict(FIXED)
     policies['Gate 6/8, p ≥ 0.7, wave off 2/3'] = dict(mode='gate', k=6, n=8, tau=0.7, wave_off=(2, 3))
     for label, policy in policies.items():
-        per_seed = [summarise([r for k in FOLDS for r in outcomes(streams[(s, k)], policy)]) for s in seeds]
-        results[label] = across_seeds(per_seed)
+        records[label] = [[r for k in FOLDS for r in outcomes(streams[(s, k)], policy)] for s in seeds]
 
     # held-out selection: a separate choice for every (seed, test fold)
     for with_light_abort in (False, True):
-        per_seed = []
+        label = 'Gate selected on training actors' + (', wave off 2/3' if with_light_abort else '')
+        records[label] = []
         for s in seeds:
-            records = []
+            per_fold = []
             for k in FOLDS:
                 policy = dict(select(streams, s, k))
                 if with_light_abort:
                     policy['wave_off'] = (2, 3)
                 chosen.setdefault(str(with_light_abort), []).append(dict(seed=s, fold=k, **policy))
-                records += outcomes(streams[(s, k)], policy)
-            per_seed.append(summarise(records))
-        label = 'Gate selected on training actors' + (', wave off 2/3' if with_light_abort else '')
-        results[label] = across_seeds(per_seed)
+                per_fold += outcomes(streams[(s, k)], policy)
+            records[label].append(per_fold)
+
+    results = {label: across_seeds([summarise(r) for r in recs]) for label, recs in records.items()}
+    endings = {}
+    for label in ('Act on every window', 'Vote 3/4, p ≥ 0.8', 'Gate selected on training actors'):
+        per_seed = [stream_outcomes(r) for r in records[label]]
+        endings[label] = {key: float(np.mean([o[key] for o in per_seed])) for key in per_seed[0]}
 
     for label, r in results.items():
         print(f'{label:38s} executed {100 * r["executed"]["mean"]:5.1f}%  wrong/stream '
               f'{r["wrong_per_stream"]["mean"]:.3f}  latency {r["median_latency_s"]["mean"]:.1f} s  '
               f'false wave-off {r["false_wave_off_armed"]["mean"]:.3f}/{r["false_wave_off_unarmed"]["mean"]:.3f}  '
               f'abort {100 * r["abort_executed"]["mean"]:.0f}% in {r["abort_median_latency_s"]["mean"]:.1f} s')
-    save_json(dict(policies=results, selected_settings=chosen, risk_groups=RISK, streams_per_seed=n_streams),
+    save_json(dict(policies=results, stream_outcomes=endings, selected_settings=chosen, risk_groups=RISK,
+                   streams_per_seed=n_streams),
               'safety_gate.json')
 
 

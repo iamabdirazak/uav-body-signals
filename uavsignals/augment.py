@@ -58,7 +58,7 @@ def low_fps(x, visible, fps, base=FPS):
 
 
 def augment(x, visible, rng):
-    """Training-time viewpoint augmentation (paper, Section III-D)."""
+    """Training-time viewpoint augmentation."""
     x, visible = rotate(x, visible, rng.uniform(-10, 10))
     x, visible = elevation(x, visible, rng.uniform(0, 60))
     x = x * rng.uniform(0.8, 1.2, (1, 1, 2)).astype(np.float32)

@@ -1,4 +1,4 @@
-"""Cross-dataset evaluation on UAV-Human: real aerial footage of other people (Table II).
+"""Cross-dataset evaluation on UAV-Human: real aerial footage of other people.
 
   signals    the 13 UAV-GESTURE signals as performed in UAV-Human, classified by the models trained on
              UAV-GESTURE. Every seed's three fold models are used, and accuracy is averaged per seed.

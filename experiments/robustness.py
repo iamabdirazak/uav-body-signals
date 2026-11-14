@@ -1,4 +1,4 @@
-"""Accuracy under simulated deployment conditions, applied to test keypoints without retraining (Fig. 3).
+"""Accuracy under simulated deployment conditions, applied to test keypoints without retraining.
 
 Uses every seed's checkpoints from experiments.train and reports the mean over seeds with a 95%
 confidence interval.

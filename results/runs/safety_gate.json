@@ -337,6 +337,32 @@
    }
   }
  },
+ "stream_outcomes": {
+  "Act on every window": {
+   "armed_clean": 0.2119047619047619,
+   "armed_hit_wrong": 0.7714285714285714,
+   "armed_wrong_only": 0.016666666666666666,
+   "armed_none": 0.0,
+   "unarmed_clean": 0.02142857142857143,
+   "unarmed_wrong": 0.9785714285714284
+  },
+  "Vote 3/4, p \u2265 0.8": {
+   "armed_clean": 0.6976190476190476,
+   "armed_hit_wrong": 0.14523809523809522,
+   "armed_wrong_only": 0.026190476190476188,
+   "armed_none": 0.13095238095238096,
+   "unarmed_clean": 0.1738095238095238,
+   "unarmed_wrong": 0.8261904761904763
+  },
+  "Gate selected on training actors": {
+   "armed_clean": 0.819047619047619,
+   "armed_hit_wrong": 0.0023809523809523807,
+   "armed_wrong_only": 0.08095238095238096,
+   "armed_none": 0.09761904761904763,
+   "unarmed_clean": 0.9904761904761905,
+   "unarmed_wrong": 0.009523809523809523
+  }
+ },
  "selected_settings": {
   "False": [
    {

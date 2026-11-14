@@ -1,4 +1,4 @@
-"""Train and evaluate every configuration on the three actor-disjoint folds, with several seeds (Table I).
+"""Train and evaluate every configuration on the three actor-disjoint folds, with several seeds.
 
 Each (configuration, fold, seed) run saves a checkpoint and its per-video predictions. Finished runs
 are skipped, so an interrupted job can simply be started again.
